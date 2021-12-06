@@ -162,7 +162,9 @@ func (sc *consensusStateSyncImpl) Run(childEnv *env.Env) error {
 	}
 
 	// Make sure that the last retained height has been set correctly.
-	if lrh := status.Consensus.LastRetainedHeight; lrh < 20 {
+	// XXX: This used to be `lrh < 20`, but there's no explanation given as
+	// to why this hardcoded value should be 20.
+	if lrh := status.Consensus.LastRetainedHeight; lrh < 10 {
 		return fmt.Errorf("unexpected last retained height from state synced node (got: %d)", lrh)
 	}
 

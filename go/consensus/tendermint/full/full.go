@@ -15,20 +15,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	flag "github.com/spf13/pflag"
 	"github.com/spf13/viper"
+	tmabciclient "github.com/tendermint/tendermint/abci/client"
 	tmabcitypes "github.com/tendermint/tendermint/abci/types"
 	tmconfig "github.com/tendermint/tendermint/config"
 	tmpubsub "github.com/tendermint/tendermint/libs/pubsub"
-	tmlight "github.com/tendermint/tendermint/light"
-	tmmempool "github.com/tendermint/tendermint/mempool"
 	tmnode "github.com/tendermint/tendermint/node"
-	tmp2p "github.com/tendermint/tendermint/p2p"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	tmproxy "github.com/tendermint/tendermint/proxy"
 	tmcli "github.com/tendermint/tendermint/rpc/client/local"
-	tmrpctypes "github.com/tendermint/tendermint/rpc/core/types"
-	tmstate "github.com/tendermint/tendermint/state"
-	tmstatesync "github.com/tendermint/tendermint/statesync"
+	tmrpctypes "github.com/tendermint/tendermint/rpc/coretypes"
 	tmtypes "github.com/tendermint/tendermint/types"
+	tminternal "github.com/tendermint/tendermint/uninternal"
 	tmdb "github.com/tendermint/tm-db"
 
 	beaconAPI "github.com/oasisprotocol/oasis-core/go/beacon/api"
@@ -55,7 +51,6 @@ import (
 	"github.com/oasisprotocol/oasis-core/go/consensus/tendermint/db"
 	tmgovernance "github.com/oasisprotocol/oasis-core/go/consensus/tendermint/governance"
 	tmkeymanager "github.com/oasisprotocol/oasis-core/go/consensus/tendermint/keymanager"
-	"github.com/oasisprotocol/oasis-core/go/consensus/tendermint/light"
 	tmregistry "github.com/oasisprotocol/oasis-core/go/consensus/tendermint/registry"
 	tmroothash "github.com/oasisprotocol/oasis-core/go/consensus/tendermint/roothash"
 	tmscheduler "github.com/oasisprotocol/oasis-core/go/consensus/tendermint/scheduler"
@@ -161,12 +156,12 @@ type fullService struct { // nolint: maligned
 	svcMgr        *cmbackground.ServiceManager
 	upgrader      upgradeAPI.Backend
 	mux           *abci.ApplicationServer
-	node          *tmnode.Node
+	node          *tmnode.NodeImpl
 	client        *tmcli.Local
 	blockNotifier *pubsub.Broker
 	failMonitor   *failMonitor
 
-	stateStore tmstate.Store
+	stateStore tminternal.Store
 
 	beacon        beaconAPI.Backend
 	governance    governanceAPI.Backend
@@ -484,7 +479,7 @@ func (t *fullService) SubmitTx(ctx context.Context, tx *transaction.SignedTransa
 			return errors.FromCode(result.GetCodespace(), result.GetCode(), result.GetLog())
 		}
 		return nil
-	case <-txSub.Cancelled():
+	case <-txSub.Canceled():
 		return context.Canceled
 	case <-ctx.Done():
 		return ctx.Err()
@@ -492,28 +487,19 @@ func (t *fullService) SubmitTx(ctx context.Context, tx *transaction.SignedTransa
 }
 
 func (t *fullService) broadcastTxRaw(data []byte) error {
-	// We could use t.client.BroadcastTxSync but that is annoying as it
-	// doesn't give you the right fields when CheckTx fails.
-	mp := t.node.Mempool()
+	rsp, err := t.client.BroadcastTxSync(t.ctx, tmtypes.Tx(data))
 
-	// Submit the transaction to mempool and wait for response.
-	ch := make(chan *tmabcitypes.Response, 1)
-	err := mp.CheckTx(tmtypes.Tx(data), func(rsp *tmabcitypes.Response) {
-		ch <- rsp
-		close(ch)
-	}, tmmempool.TxInfo{})
 	switch err {
 	case nil:
-	case tmmempool.ErrTxInCache:
+	case tmtypes.ErrTxInCache:
 		// Transaction already in the mempool or was recently there.
 		return consensusAPI.ErrDuplicateTx
 	default:
 		return fmt.Errorf("tendermint: failed to submit to local mempool: %w", err)
 	}
 
-	rsp := <-ch
-	if result := rsp.GetCheckTx(); !result.IsOK() {
-		return errors.FromCode(result.GetCodespace(), result.GetCode(), result.GetLog())
+	if rsp.Code != tmabcitypes.CodeTypeOK {
+		return errors.FromCode(rsp.Codespace, rsp.Code, rsp.Log)
 	}
 
 	return nil
@@ -587,7 +573,7 @@ func (t *fullService) subscribe(subscriber string, query tmpubsub.Query) (tmtype
 
 func (t *fullService) unsubscribe(subscriber string, query tmpubsub.Query) error {
 	if t.started() {
-		return t.node.EventBus().Unsubscribe(t.ctx, subscriber, query)
+		return t.node.EventBus().Unsubscribe(t.ctx, tmpubsub.UnsubscribeArgs{Subscriber: subscriber, Query: query})
 	}
 
 	return fmt.Errorf("tendermint: unsubscribe called with no backing service")
@@ -822,13 +808,23 @@ func (t *fullService) GetStatus(ctx context.Context) (*consensusAPI.Status, erro
 		}
 
 		// List of consensus peers.
-		tmpeers := t.node.Switch().Peers().List()
-		peers := make([]string, 0, len(tmpeers))
-		for _, tmpeer := range tmpeers {
-			p := string(tmpeer.ID()) + "@" + tmpeer.RemoteAddr().String()
-			peers = append(peers, p)
+		status.NodePeers = []string{}
+		rpcenv := t.node.RPCEnvironment()
+		if rpcenv != nil {
+			if rpcenv.PeerManager != nil {
+				p2pPeers := rpcenv.PeerManager.Peers()
+				if p2pPeers != nil {
+					peers := make([]string, 0, len(p2pPeers))
+					for _, peer := range p2pPeers {
+						addrs := rpcenv.PeerManager.Addresses(peer)
+						for _, addr := range addrs {
+							peers = append(peers, addr.String())
+						}
+					}
+					status.NodePeers = peers
+				}
+			}
 		}
-		status.NodePeers = peers
 
 		// Check if the local node is in the validator set for the latest (uncommitted) block.
 		valSetHeight := status.LatestHeight + 1
@@ -854,7 +850,7 @@ func (t *fullService) GetNextBlockState(ctx context.Context) (*consensusAPI.Next
 		return nil, fmt.Errorf("tendermint: not yet started")
 	}
 
-	rs := t.node.ConsensusState().GetRoundState()
+	rs := t.node.RPCEnvironment().ConsensusState.GetRoundState()
 	nbs := &consensusAPI.NextBlockState{
 		Height: rs.Height,
 
@@ -1052,7 +1048,15 @@ func (t *fullService) GetLastRetainedVersion(ctx context.Context) (int64, error)
 	if err := t.ensureStarted(ctx); err != nil {
 		return -1, err
 	}
-	return t.node.BlockStore().Base(), nil
+	base := t.node.RPCEnvironment().BlockStore.Base()
+	earliest, err := t.mux.State().Storage().NodeDB().GetEarliestVersion(ctx)
+	if err != nil {
+		return -1, err
+	}
+	if int64(earliest) > base {
+		return int64(earliest), nil
+	}
+	return base, nil
 }
 
 func (t *fullService) heightToTendermintHeight(height int64) (int64, error) {
@@ -1179,16 +1183,18 @@ func (t *fullService) lazyInit() error {
 	tenderConfig := tmconfig.DefaultConfig()
 	_ = viper.Unmarshal(&tenderConfig)
 	tenderConfig.SetRoot(tendermintDataDir)
+	tenderConfig.Mode = tmconfig.ModeValidator
+	tenderConfig.Moniker = "oasis-node-" + t.identity.P2PSigner.Public().String()
+	tenderConfig.Mempool.Version = tmconfig.MempoolV0
 	timeoutCommit := t.genesis.Consensus.Parameters.TimeoutCommit
 	emptyBlockInterval := t.genesis.Consensus.Parameters.EmptyBlockInterval
 	tenderConfig.Consensus.TimeoutCommit = timeoutCommit
 	tenderConfig.Consensus.SkipTimeoutCommit = t.genesis.Consensus.Parameters.SkipTimeoutCommit
 	tenderConfig.Consensus.CreateEmptyBlocks = true
 	tenderConfig.Consensus.CreateEmptyBlocksInterval = emptyBlockInterval
-	tenderConfig.Consensus.DebugUnsafeReplayRecoverCorruptedWAL = viper.GetBool(CfgDebugUnsafeReplayRecoverCorruptedWAL) && cmflags.DebugDontBlameOasis()
 	tenderConfig.Instrumentation.Prometheus = true
 	tenderConfig.Instrumentation.PrometheusListenAddr = ""
-	tenderConfig.TxIndex.Indexer = "null"
+	tenderConfig.TxIndex.Indexer = []string{"null"}
 	tenderConfig.P2P.ListenAddress = viper.GetString(tmcommon.CfgCoreListenAddress)
 	tenderConfig.P2P.ExternalAddress = viper.GetString(tmcommon.CfgCoreExternalAddress)
 	tenderConfig.P2P.PexReactor = !viper.GetBool(CfgP2PDisablePeerExchange)
@@ -1207,14 +1213,15 @@ func (t *fullService) lazyInit() error {
 	// Since persistent peers is expected to be in comma-delimited ID format,
 	// lowercasing the whole string is ok.
 	tenderConfig.P2P.UnconditionalPeerIDs = strings.ToLower(strings.Join(viper.GetStringSlice(CfgP2PUnconditionalPeerIDs), ","))
-	// Seed Ids need to be lowercase as p2p/transport.go:MultiplexTransport.upgrade()
+	// BootstrapPeers need to be lowercase as p2p/transport.go:MultiplexTransport.upgrade()
 	// uses a case sensitive string comparison to validate public keys.
 	// Since Seeds is expected to be in comma-delimited ID@host:port format,
 	// lowercasing the whole string is ok.
-	tenderConfig.P2P.Seeds = strings.ToLower(strings.Join(viper.GetStringSlice(tmcommon.CfgP2PSeed), ","))
+	tenderConfig.P2P.BootstrapPeers = strings.ToLower(strings.Join(viper.GetStringSlice(tmcommon.CfgP2PSeed), ","))
 	tenderConfig.P2P.AddrBookStrict = !(viper.GetBool(tmcommon.CfgDebugP2PAddrBookLenient) && cmflags.DebugDontBlameOasis())
 	tenderConfig.P2P.AllowDuplicateIP = viper.GetBool(tmcommon.CfgDebugP2PAllowDuplicateIP) && cmflags.DebugDontBlameOasis()
 	tenderConfig.RPC.ListenAddress = ""
+	tenderConfig.RPC.MaxSubscriptionsPerClient = 10
 
 	sentryUpstreamAddrs := viper.GetStringSlice(CfgSentryUpstreamAddress)
 	if len(sentryUpstreamAddrs) > 0 {
@@ -1273,7 +1280,7 @@ func (t *fullService) lazyInit() error {
 	// HACK: Wrap the provider so we can extract the state database handle. This is required because
 	// Tendermint does not expose a way to access the state database and we need it to bypass some
 	// stupid things like pagination on the in-process "client".
-	wrapDbProvider := func(dbCtx *tmnode.DBContext) (tmdb.DB, error) {
+	wrapDbProvider := func(dbCtx *tmconfig.DBContext) (tmdb.DB, error) {
 		db, derr := dbProvider(dbCtx)
 		if derr != nil {
 			return nil, derr
@@ -1282,7 +1289,7 @@ func (t *fullService) lazyInit() error {
 		switch dbCtx.ID {
 		case "state":
 			// Tendermint state database.
-			t.stateStore = tmstate.NewStore(db)
+			t.stateStore = tminternal.NewStore(db)
 		default:
 		}
 
@@ -1290,37 +1297,16 @@ func (t *fullService) lazyInit() error {
 	}
 
 	// Configure state sync if enabled.
-	var stateProvider tmstatesync.StateProvider
 	if viper.GetBool(CfgConsensusStateSyncEnabled) {
 		t.Logger.Info("state sync enabled")
 
 		// Enable state sync in the configuration.
 		tenderConfig.StateSync.Enable = true
+		tenderConfig.StateSync.UseP2P = true
+		tenderConfig.StateSync.RPCServers = viper.GetStringSlice(CfgConsensusStateSyncConsensusNode)
 		tenderConfig.StateSync.TrustHash = viper.GetString(CfgConsensusStateSyncTrustHash)
-
-		// Create new state sync state provider.
-		cfg := light.ClientConfig{
-			GenesisDocument: tmGenDoc,
-			TrustOptions: tmlight.TrustOptions{
-				Period: viper.GetDuration(CfgConsensusStateSyncTrustPeriod),
-				Height: int64(viper.GetUint64(CfgConsensusStateSyncTrustHeight)),
-				Hash:   tenderConfig.StateSync.TrustHashBytes(),
-			},
-		}
-		for _, rawAddr := range viper.GetStringSlice(CfgConsensusStateSyncConsensusNode) {
-			var addr node.TLSAddress
-			if err = addr.UnmarshalText([]byte(rawAddr)); err != nil {
-				return fmt.Errorf("failed to parse state sync consensus node address (%s): %w", rawAddr, err)
-			}
-
-			cfg.ConsensusNodes = append(cfg.ConsensusNodes, addr)
-		}
-		if stateProvider, err = newStateProvider(t.ctx, cfg); err != nil {
-			t.Logger.Error("failed to create state sync state provider",
-				"err", err,
-			)
-			return fmt.Errorf("failed to create state sync state provider: %w", err)
-		}
+		tenderConfig.StateSync.TrustHeight = int64(viper.GetUint64(CfgConsensusStateSyncTrustHeight))
+		tenderConfig.StateSync.TrustPeriod = viper.GetDuration(CfgConsensusStateSyncTrustPeriod)
 	}
 
 	// HACK: tmnode.NewNode() triggers block replay and or ABCI chain
@@ -1344,15 +1330,14 @@ func (t *fullService) lazyInit() error {
 			}
 		}()
 
-		t.node, err = tmnode.NewNode(tenderConfig,
+		tmpk := crypto.SignerToTendermint(t.identity.P2PSigner)
+		t.node, err = tmnode.MakeNode(tenderConfig,
 			tendermintPV,
-			&tmp2p.NodeKey{PrivKey: crypto.SignerToTendermint(t.identity.P2PSigner)},
-			tmproxy.NewLocalClientCreator(t.mux.Mux()),
+			tmtypes.NodeKey{ID: tmtypes.NodeIDFromPubKey(tmpk.PubKey()), PrivKey: tmpk},
+			tmabciclient.NewLocalCreator(t.mux.Mux()),
 			tendermintGenesisProvider,
 			wrapDbProvider,
-			tmnode.DefaultMetricsProvider(tenderConfig.Instrumentation),
 			tmcommon.NewLogAdapter(!viper.GetBool(tmcommon.CfgLogDebug)),
-			tmnode.StateProvider(stateProvider),
 		)
 		if err != nil {
 			return fmt.Errorf("tendermint: failed to create node: %w", err)
@@ -1361,8 +1346,11 @@ func (t *fullService) lazyInit() error {
 			// Sanity check for the above wrapDbProvider hack in case the DB provider changes.
 			return fmt.Errorf("tendermint: internal error: state database not set")
 		}
-		t.client = tmcli.New(t.node)
-		t.failMonitor = newFailMonitor(t.ctx, t.Logger, t.node.ConsensusState().Wait)
+		t.client, err = tmcli.New(t.node)
+		if err != nil {
+			return fmt.Errorf("tendermint: failed to create RPC client: %w", err)
+		}
+		t.failMonitor = newFailMonitor(t.ctx, t.Logger, t.node.RPCEnvironment().ConsensusState.Wait)
 
 		// Register a halt hook that handles upgrades gracefully.
 		t.RegisterHaltHook(func(ctx context.Context, blockHeight int64, epoch beaconAPI.EpochTime, err error) {
@@ -1475,12 +1463,12 @@ func (t *fullService) blockNotifierWorker() {
 	if sub == (*tmpubsub.Subscription)(nil) {
 		return
 	}
-	defer t.node.EventBus().Unsubscribe(t.ctx, tmSubscriberID, tmtypes.EventQueryNewBlock) // nolint: errcheck
+	defer t.node.EventBus().Unsubscribe(t.ctx, tmpubsub.UnsubscribeArgs{Subscriber: tmSubscriberID, Query: tmtypes.EventQueryNewBlock}) // nolint: errcheck
 
 	for {
 		select {
 		// Should not return on t.ctx.Done()/t.node.Quit() as that could lead to a deadlock.
-		case <-sub.Cancelled():
+		case <-sub.Canceled():
 			return
 		case v := <-sub.Out():
 			ev := v.Data().(tmtypes.EventDataNewBlock)

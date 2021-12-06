@@ -72,7 +72,9 @@ func (t *fullService) GetParameters(ctx context.Context, height int64) (*consens
 	if err != nil {
 		return nil, fmt.Errorf("%w: tendermint: consensus params query failed: %s", consensusAPI.ErrVersionNotFound, err.Error())
 	}
-	meta, err := params.ConsensusParams.Marshal()
+	conParams := params.ConsensusParams
+	conParamsPb := conParams.ToProto()
+	meta, err := conParamsPb.Marshal()
 	if err != nil {
 		return nil, fmt.Errorf("tendermint: failed to marshal consensus params: %w", err)
 	}

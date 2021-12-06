@@ -339,7 +339,7 @@ func (c *Context) hasEvent(app string, key []byte) bool {
 		}
 
 		for _, pair := range ev.Attributes {
-			if bytes.Equal(pair.GetKey(), key) {
+			if bytes.Equal([]byte(pair.GetKey()), key) {
 				return true
 			}
 		}
@@ -357,7 +357,7 @@ func (c *Context) DecodeEvent(index int, ev events.TypedAttribute) error {
 	raw := c.events[index]
 	for _, pair := range raw.Attributes {
 		if events.IsAttributeKind(pair.GetKey(), ev) {
-			return events.DecodeValue(string(pair.GetValue()), ev)
+			return events.DecodeValue(pair.GetValue(), ev)
 		}
 	}
 	return fmt.Errorf("incompatible event")

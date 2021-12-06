@@ -256,9 +256,11 @@ func (sc *storageSyncImpl) Run(childEnv *env.Env) error { //nolint: gocyclo
 	if err = lateWorker.Start(); err != nil {
 		return fmt.Errorf("can't start second late compute worker: %w", err)
 	}
+	sc.Logger.Info("waiting for second late compute worker to become ready")
 	if err = lateWorker.WaitReady(ctx); err != nil {
 		return fmt.Errorf("error waiting for second late compute worker to become ready: %w", err)
 	}
+	sc.Logger.Info("second late compute worker is ready")
 
 	// Wait a bit to give the logger in the node time to sync; the message has already been
 	// logged by this point, it just might not be on disk yet.

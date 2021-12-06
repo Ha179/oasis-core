@@ -11,7 +11,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	tmabcitypes "github.com/tendermint/tendermint/abci/types"
 	tmpubsub "github.com/tendermint/tendermint/libs/pubsub"
-	tmrpctypes "github.com/tendermint/tendermint/rpc/core/types"
+	tmrpctypes "github.com/tendermint/tendermint/rpc/coretypes"
 	tmtypes "github.com/tendermint/tendermint/types"
 
 	"github.com/oasisprotocol/oasis-core/go/common"
@@ -440,14 +440,14 @@ func (sc *serviceClient) reindexBlocks(currentHeight int64, bh api.BlockHistory)
 					}
 
 					var rtAttribute api.RuntimeIDAttribute
-					if err = eventsAPI.DecodeValue(string(val), &rtAttribute); err != nil {
+					if err = eventsAPI.DecodeValue(val, &rtAttribute); err != nil {
 						return 0, fmt.Errorf("roothash: corrupt runtime ID: %w", err)
 					}
 					evRtID = &rtAttribute.ID
 
 				case eventsAPI.IsAttributeKind(key, &api.FinalizedEvent{}):
 					var e api.FinalizedEvent
-					if err = eventsAPI.DecodeValue(string(val), &e); err != nil {
+					if err = eventsAPI.DecodeValue(val, &e); err != nil {
 						logger.Error("failed to unmarshal finalized event",
 							"err", err,
 							"height", height,
@@ -727,7 +727,7 @@ EventLoop:
 			case eventsAPI.IsAttributeKind(key, &api.FinalizedEvent{}):
 				// Finalized event.
 				var e api.FinalizedEvent
-				if err := eventsAPI.DecodeValue(string(val), &e); err != nil {
+				if err := eventsAPI.DecodeValue(val, &e); err != nil {
 					errs = multierror.Append(errs, fmt.Errorf("roothash: corrupt Finalized event: %w", err))
 					continue EventLoop
 				}
@@ -736,7 +736,7 @@ EventLoop:
 			case eventsAPI.IsAttributeKind(key, &api.ExecutionDiscrepancyDetectedEvent{}):
 				// An execution discrepancy has been detected.
 				var e api.ExecutionDiscrepancyDetectedEvent
-				if err := eventsAPI.DecodeValue(string(val), &e); err != nil {
+				if err := eventsAPI.DecodeValue(val, &e); err != nil {
 					errs = multierror.Append(errs, fmt.Errorf("roothash: corrupt ExecutionDiscrepancyDetected event: %w", err))
 					continue EventLoop
 				}
@@ -745,7 +745,7 @@ EventLoop:
 			case eventsAPI.IsAttributeKind(key, &api.ExecutorCommittedEvent{}):
 				// An executor commit has been processed.
 				var e api.ExecutorCommittedEvent
-				if err := eventsAPI.DecodeValue(string(val), &e); err != nil {
+				if err := eventsAPI.DecodeValue(val, &e); err != nil {
 					errs = multierror.Append(errs, fmt.Errorf("roothash: corrupt ExecutorComitted event: %w", err))
 					continue EventLoop
 				}
@@ -754,7 +754,7 @@ EventLoop:
 			case eventsAPI.IsAttributeKind(key, &api.InMsgProcessedEvent{}):
 				// Incoming message processed event.
 				var e api.InMsgProcessedEvent
-				if err := eventsAPI.DecodeValue(string(val), &e); err != nil {
+				if err := eventsAPI.DecodeValue(val, &e); err != nil {
 					errs = multierror.Append(errs, fmt.Errorf("roothash: corrupt InMsgProcessed event: %w", err))
 					continue EventLoop
 				}
@@ -766,7 +766,7 @@ EventLoop:
 					continue EventLoop
 				}
 				rtAttribute := api.RuntimeIDAttribute{}
-				if err := eventsAPI.DecodeValue(string(val), &rtAttribute); err != nil {
+				if err := eventsAPI.DecodeValue(val, &rtAttribute); err != nil {
 					errs = multierror.Append(errs, fmt.Errorf("roothash: corrupt runtime ID: %w", err))
 					continue EventLoop
 				}
