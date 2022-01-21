@@ -101,6 +101,7 @@ func (w *vrfWorker) worker() {
 			)
 			w.txRetry.Cancel()
 		case blk := <-blockCh:
+			w.logger.Debug("VRF block", "height", blk.Height)
 			height = blk.Height
 		}
 

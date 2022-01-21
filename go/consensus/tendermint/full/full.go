@@ -1183,6 +1183,7 @@ func (t *fullService) lazyInit() error {
 	tenderConfig := tmconfig.DefaultConfig()
 	_ = viper.Unmarshal(&tenderConfig)
 	tenderConfig.SetRoot(tendermintDataDir)
+	tenderConfig.LogLevel = "debug"
 	tenderConfig.Mode = tmconfig.ModeValidator
 	tenderConfig.Moniker = "oasis-node-" + t.identity.P2PSigner.Public().String()
 	tenderConfig.Mempool.Version = tmconfig.MempoolV0

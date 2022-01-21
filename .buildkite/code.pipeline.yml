@@ -211,7 +211,7 @@ steps:
       - "build-rust-runtime-loader"
       - "build-rust-runtimes"
     parallelism: 30
-    timeout_in_minutes: 15
+    timeout_in_minutes: 20
     command:
       - .buildkite/scripts/download_e2e_test_artifacts.sh
       - .buildkite/scripts/test_e2e.sh

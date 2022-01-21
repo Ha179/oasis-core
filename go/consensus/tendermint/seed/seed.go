@@ -372,6 +372,7 @@ func New(dataDir string, identity *identity.Identity, genesisProvider genesis.Pr
 	nodeCfg.Mempool.Version = config.MempoolV0
 	nodeCfg.P2P = p2pCfg
 	nodeCfg.SetRoot(seedDataDir)
+	nodeCfg.LogLevel = "debug"
 
 	tmpk := crypto.SignerToTendermint(identity.P2PSigner)
 	nodeKey := tmtypes.NodeKey{ID: tmtypes.NodeIDFromPubKey(tmpk.PubKey()), PrivKey: tmpk}
