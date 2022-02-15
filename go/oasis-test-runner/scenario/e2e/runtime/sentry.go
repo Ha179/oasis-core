@@ -300,8 +300,8 @@ func (s *sentryImpl) Run(childEnv *env.Env) error { // nolint: gocyclo
 	validator0ConsensusPeers := consensusTendermintAddrs(validator0Status)
 	if err = sanityCheckValidatorPeers(validator0ExpectedPeerKeys, validator0ConsensusPeers); err != nil {
 		s.Logger.Error("validator0 invalid consensus peers",
-			"expected", validator0ExpectedPeerKeys,
-			"actual", validator0ConsensusPeers,
+			"expected", strings.Join(validator0ExpectedPeerKeys, ","),
+			"actual", strings.Join(validator0ConsensusPeers, ","),
 		)
 		return err
 	}
@@ -314,8 +314,8 @@ func (s *sentryImpl) Run(childEnv *env.Env) error { // nolint: gocyclo
 	validator1ConsensusPeers := consensusTendermintAddrs(validator1Status)
 	if err = sanityCheckValidatorPeers(validator12ExpectedPeerKeys, validator1ConsensusPeers); err != nil {
 		s.Logger.Error("validator1 invalid consensus peers",
-			"expected", validator12ExpectedPeerKeys,
-			"actual", validator1ConsensusPeers,
+			"expected", strings.Join(validator12ExpectedPeerKeys, ","),
+			"actual", strings.Join(validator1ConsensusPeers, ","),
 		)
 		return err
 	}
@@ -328,8 +328,8 @@ func (s *sentryImpl) Run(childEnv *env.Env) error { // nolint: gocyclo
 	validator2ConsensusPeers := consensusTendermintAddrs(validator2Status)
 	if err = sanityCheckValidatorPeers(validator12ExpectedPeerKeys, validator2ConsensusPeers); err != nil {
 		s.Logger.Error("validator2 invalid consensus peers",
-			"expected", validator12ExpectedPeerKeys,
-			"actual", validator2ConsensusPeers,
+			"expected", strings.Join(validator12ExpectedPeerKeys, ","),
+			"actual", strings.Join(validator2ConsensusPeers, ","),
 		)
 		return err
 	}

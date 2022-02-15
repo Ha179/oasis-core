@@ -808,23 +808,30 @@ func (t *fullService) GetStatus(ctx context.Context) (*consensusAPI.Status, erro
 		}
 
 		// List of consensus peers.
+		fmt.Printf("\n\n\n### NODE PEERS BEGIN\n")
 		status.NodePeers = []string{}
 		rpcenv := t.node.RPCEnvironment()
 		if rpcenv != nil {
+			fmt.Printf("### NODE PEERS: rpcenv exists\n")
 			if rpcenv.PeerManager != nil {
+				fmt.Printf("### NODE PEERS: peermanager exists\n")
 				p2pPeers := rpcenv.PeerManager.Peers()
 				if p2pPeers != nil {
+					fmt.Printf("### NODE PEERS: p2ppeers exist (len is %d)\n", len(p2pPeers))
 					peers := make([]string, 0, len(p2pPeers))
 					for _, peer := range p2pPeers {
 						addrs := rpcenv.PeerManager.Addresses(peer)
+						fmt.Printf("### NODE PEERS: peer %s has %d addresses\n", peer, len(addrs))
 						for _, addr := range addrs {
 							peers = append(peers, addr.String())
 						}
 					}
+					fmt.Printf("### NODE PEERS: got peers from peermanager: %v\n", peers)
 					status.NodePeers = peers
 				}
 			}
 		}
+		fmt.Printf("### NODE PEERS END: %v\n\n\n\n", status.NodePeers)
 
 		// Check if the local node is in the validator set for the latest (uncommitted) block.
 		valSetHeight := status.LatestHeight + 1
