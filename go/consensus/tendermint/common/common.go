@@ -43,10 +43,8 @@ const (
 
 	// CfgP2PSeed configures tendermint's seed node(s).
 	CfgP2PSeed = "consensus.tendermint.p2p.seed"
-	// CfgP2PMaxNumInboundPeers configures the max number of inbound peers.
-	CfgP2PMaxNumInboundPeers = "consensus.tendermint.p2p.max_num_inbound_peers"
-	// CfgP2PMaxNumOutboundPeers configures the max number of outbound peers, excluding persistent peers.
-	CfgP2PMaxNumOutboundPeers = "consensus.tendermint.p2p.max_num_outbound_peers"
+	// CfgP2PMaxConnections configures the max number of connected peers (inbound and outbound).
+	CfgP2PMaxConnections = "consensus.tendermint.p2p.max_connections"
 	// CfgP2PSendRate is the rate at which packets can be sent, in bytes/second.
 	CfgP2PSendRate = "consensus.tendermint.p2p.send_rate"
 	// CfgP2PRecvRate is the rate at which packets can be received, in bytes/second.
@@ -121,8 +119,7 @@ func init() {
 	Flags.Bool(CfgDebugP2PAllowDuplicateIP, false, "Allow multiple connections from the same IP")
 
 	Flags.StringSlice(CfgP2PSeed, []string{}, "Tendermint seed node(s) of the form ID@host:port")
-	Flags.Int(CfgP2PMaxNumInboundPeers, 40, "Max number of inbound peers")
-	Flags.Int(CfgP2PMaxNumOutboundPeers, 20, "Max number of outbound peers (excluding persistent peers)")
+	Flags.Uint16(CfgP2PMaxConnections, 40, "Max number of peer connections (inbound and outbound)")
 	Flags.Int64(CfgP2PSendRate, 5120000, "Rate at which packets can be sent (bytes/sec)")
 	Flags.Int64(CfgP2PRecvRate, 5120000, "Rate at which packets can be received (bytes/sec)")
 

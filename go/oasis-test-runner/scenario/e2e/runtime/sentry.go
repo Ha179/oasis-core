@@ -18,20 +18,13 @@ import (
 	"github.com/oasisprotocol/oasis-core/go/consensus/tendermint/crypto"
 	control "github.com/oasisprotocol/oasis-core/go/control/api"
 	"github.com/oasisprotocol/oasis-core/go/oasis-test-runner/env"
-	"github.com/oasisprotocol/oasis-core/go/oasis-test-runner/log"
 	"github.com/oasisprotocol/oasis-core/go/oasis-test-runner/oasis"
 	"github.com/oasisprotocol/oasis-core/go/oasis-test-runner/scenario"
 	"github.com/oasisprotocol/oasis-core/go/sentry/api"
 )
 
-var (
-	// Sentry is the Sentry node basic scenario.
-	Sentry scenario.Scenario = newSentryImpl("sentry", BasicKVTestClient)
-
-	validatorExtraLogWatcherHandlerFactories = []log.WatcherHandlerFactory{
-		oasis.LogAssertPeerExchangeDisabled(),
-	}
-)
+// Sentry is the Sentry node basic scenario.
+var Sentry scenario.Scenario = newSentryImpl("sentry", BasicKVTestClient)
 
 const sentryChecksContextTimeout = 30 * time.Second
 
@@ -100,20 +93,17 @@ func (s *sentryImpl) Fixture() (*oasis.NetworkFixture, error) {
 
 	f.Validators = []oasis.ValidatorFixture{
 		{
-			Entity:                     1,
-			LogWatcherHandlerFactories: validatorExtraLogWatcherHandlerFactories,
-			Sentries:                   []int{0, 1},
-			Consensus:                  oasis.ConsensusFixture{SupplementarySanityInterval: 1},
+			Entity:    1,
+			Sentries:  []int{0, 1},
+			Consensus: oasis.ConsensusFixture{SupplementarySanityInterval: 1},
 		},
 		{
-			Entity:                     1,
-			LogWatcherHandlerFactories: validatorExtraLogWatcherHandlerFactories,
-			Sentries:                   []int{2},
+			Entity:   1,
+			Sentries: []int{2},
 		},
 		{
-			Entity:                     1,
-			LogWatcherHandlerFactories: validatorExtraLogWatcherHandlerFactories,
-			Sentries:                   []int{2},
+			Entity:   1,
+			Sentries: []int{2},
 		},
 	}
 

@@ -234,9 +234,10 @@ func (args *argBuilder) tendermintSentryUpstreamAddress(addrs []string) *argBuil
 	return args
 }
 
-func (args *argBuilder) tendermintDisablePeerExchange() *argBuilder {
+func (args *argBuilder) tendermintMaxConnections(num int) *argBuilder {
 	args.vec = append(args.vec, Argument{
-		Name: tendermintFull.CfgP2PDisablePeerExchange,
+		Name:   tendermintCommon.CfgP2PMaxConnections,
+		Values: []string{strconv.Itoa(num)},
 	})
 	return args
 }
